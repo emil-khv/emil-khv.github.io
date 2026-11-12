@@ -42,15 +42,28 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .legend .cat{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--text)}
 .legend .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .fab{position:fixed;right:10px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:400;display:flex;flex-direction:column;gap:8px}
-.count{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:400;background:var(--bg);box-shadow:var(--shadow);border-radius:20px;height:40px;padding:0 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
+.count{position:fixed;left:10px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:400;background:var(--bg);box-shadow:var(--shadow);border-radius:20px;height:40px;padding:0 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
 .pin{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font-weight:700;font-size:11px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35);border:2px solid #fff;transform:translate(-50%,-50%);position:absolute;left:0;top:0}
 .pin.dot{width:16px;height:16px;border-radius:50%;padding:0}
 .pin.lbl{height:24px;padding:0 7px}
 .pin.off{opacity:.55}
 .pin.sel{outline:3px solid var(--accent);outline-offset:1px;z-index:1000}
 .pin .star{margin-left:3px}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:800;background:var(--bg);border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.2);max-height:78vh;display:flex;flex-direction:column;transform:translateY(105%);transition:transform .25s ease;padding-bottom:env(safe-area-inset-bottom)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:800;background:var(--bg);border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.2);max-height:56vh;touch-action:pan-y;display:flex;flex-direction:column;transform:translateY(105%);transition:transform .25s ease;padding-bottom:env(safe-area-inset-bottom)}
 .sheet.open{transform:none}
+.sheet.full{max-height:90vh}
+.sheet.drag{transition:none}
+.grabzone{padding:6px 0 2px;cursor:grab;touch-action:none}
+.sh-head{touch-action:none}
+.expand{display:block;width:100%;text-align:center;font-size:12px;color:var(--muted);padding:2px 0 6px}
+.nearbtn{position:fixed;right:62px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:400;height:44px;padding:0 14px;border-radius:14px;background:var(--bg);box-shadow:var(--shadow);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+.chip.pt{background:#14161a;color:#fff}
+.chip.pt .xx{margin-left:4px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.2);display:inline-grid;place-items:center;font-size:12px}
+.emil{display:flex;gap:12px;align-items:center;background:var(--bg2);border-radius:16px;padding:12px;margin:10px 0}
+.emil img{width:56px;height:56px;border-radius:50%;object-fit:cover;flex:none}
+.emil b{display:block;font-size:15px}
+.emil span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.emil.big img{width:72px;height:72px}
 .sh-head{display:flex;align-items:flex-start;gap:10px;padding:14px 16px 8px}
 .sh-head h2{margin:0;font-size:19px;line-height:1.2;flex:1}
 .sh-head .sub{font-size:13px;color:var(--muted);margin-top:3px;font-weight:400}
@@ -154,17 +167,15 @@ details.who li{margin:2px 0}
 <div class="hint" id="hint"></div>
 <div class="legend" id="legend"></div>
 <button class="count" id="bList"><span id="cnt">0</span>&nbsp;ЖК · списком</button>
+<button class="nearbtn" id="bNear">📍 Рядом с точкой</button>
 <div class="fab">
-  <button class="ibtn" id="bNear" aria-label="Хочу жить здесь">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>
-  </button>
   <button class="ibtn" id="bLoc" aria-label="Весь город">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
   </button>
 </div>
 
 <div class="sheet" id="sheet">
-  <div class="grab"></div>
+  <div class="grabzone" id="grab"><div class="grab"></div></div>
   <div class="sh-head"><h2 id="shTitle"></h2><span id="shExtra"></span><button class="x" id="shClose" aria-label="Закрыть">✕</button></div>
   <div class="sh-body" id="shBody"></div>
 </div>
@@ -275,7 +286,8 @@ function render(){
 }
 function renderModes(){
   const keys = Object.keys(MODES).filter(k => !MODES[k].priv || PRIV);
-  $("#modes").innerHTML = keys.map(k => `<button class="chip ${S.mode===k?"on":""}" data-m="${k}">${MODES[k].label}</button>`).join("")
+  const pt = S.near ? `<button class="chip pt" data-pt="1">📍 Точка · ${S.radius} км <span class="xx" data-ptx="1">✕</span></button>` : "";
+  $("#modes").innerHTML = pt + keys.map(k => `<button class="chip ${S.mode===k?"on":""}" data-m="${k}">${MODES[k].label}</button>`).join("")
     + (S.mode==="ppm" ? `<button class="chip ${S.heat?"on":""}" data-heat="1">Тепловой слой</button>` : "")
     + `<button class="chip ${S.offers?"on":""}" data-offers="1">★ Акции</button>`
     + (FAV.length ? `<button class="chip" data-fav="1" style="color:#e5484d">♥ Избранное ${FAV.length}</button>` : "");
@@ -291,6 +303,7 @@ function renderLegend(){
 /* ---------- шторка ---------- */
 let sheetKind = null;
 function openSheet(title, body, kind, extra){
+  $("#sheet").classList.toggle("full", kind !== "card");
   $("#shExtra").innerHTML = extra || ""; $("#shTitle").innerHTML = title; $("#shBody").innerHTML = body; $("#shBody").scrollTop = 0;
   $("#sheet").classList.add("open"); sheetKind = kind;
   if (TG && TG.BackButton) { try { TG.BackButton.show(); } catch(e){} }
@@ -301,6 +314,20 @@ function closeSheet(){
   if (TG && TG.BackButton) { try { TG.BackButton.hide(); } catch(e){} }
 }
 $("#shClose").onclick = closeSheet;
+// свайп: вниз - закрыть, вверх - развернуть
+(function(){
+  const sh = $("#sheet"); let y0 = null, dy = 0;
+  const start = e => { y0 = (e.touches ? e.touches[0] : e).clientY; dy = 0; sh.classList.add("drag"); };
+  const move = e => { if (y0 == null) return; dy = (e.touches ? e.touches[0] : e).clientY - y0; if (dy > 0) sh.style.transform = `translateY(${dy}px)`; };
+  const end = () => { if (y0 == null) return; sh.classList.remove("drag"); sh.style.transform = "";
+    if (dy > 70) closeSheet(); else if (dy < -40) sh.classList.add("full"); y0 = null; };
+  ["#grab", ".sh-head"].forEach(sel => { const el = $(sel);
+    el.addEventListener("touchstart", start, {passive:true}); el.addEventListener("mousedown", start); });
+  addEventListener("touchmove", move, {passive:true}); addEventListener("mousemove", move);
+  addEventListener("touchend", end); addEventListener("mouseup", end);
+  // прокрутка содержимого вниз до упора тянет шторку наверх
+  $("#shBody").addEventListener("scroll", () => { if ($("#shBody").scrollTop > 30) sh.classList.add("full"); });
+})();
 if (TG && TG.BackButton) TG.BackButton.onClick(closeSheet);
 
 function ask(z, kind){
@@ -341,7 +368,8 @@ function openCard(id){
     <div class="note">${esc(z.addr || "")}</div>
     ${nearHtml(z)}
     ${priv}
-    <div class="cta">
+    ${EMIL_HTML(false)}
+    <div class="cta" style="margin-top:4px">
       <button class="btn p" id="cDet">Узнать подробности у Эмиля</button>
       <button class="btn s" id="cPlan">Планировки и актуальные цены</button>
     </div>
@@ -524,6 +552,8 @@ $("#modes").addEventListener("click", e => {
   if (b.dataset.heat) S.heat = !S.heat;
   if (b.dataset.offers) S.offers = !S.offers;
   if (b.dataset.fav) { openFav(); return; }
+  if (e.target.closest("[data-ptx]")) { setNear(null); closeSheet(); return; }
+  if (b.dataset.pt) { openList(); return; }
   render();
 });
 let qt; $("#q").addEventListener("input", e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value.trim().toLowerCase(); render();
@@ -541,16 +571,20 @@ function setNear(pt, list){
     L.marker([pt.lat,pt.lng], { icon:L.divIcon({className:"",html:'<div class="target"></div>',iconSize:[0,0]}), interactive:false }).addTo(nearLayer);
     map.fitBounds(L.latLng(pt.lat,pt.lng).toBounds(S.radius*2200), { animate:true });
   }
-  render(); if (list) openList();
+  render(); updNearBtn(); if (list) openList();
 }
+function updNearBtn(){ $("#bNear").textContent = picking ? "✕ Отмена" : S.near ? "✕ Убрать точку" : "📍 Рядом с точкой"; }
 $("#bNear").onclick = () => {
+  if (picking) { picking = false; hint(""); updNearBtn(); return; }
   if (S.near) { setNear(null); closeSheet(); return; }
-  closeSheet(); picking = true; hint("Коснись карты там, где клиент хочет жить");
+  closeSheet(); picking = true; updNearBtn(); hint("Коснись карты там, где хочешь жить - покажу новостройки вокруг");
 };
+map.on("contextmenu", e => { picking = false; hint(""); setNear({lat:e.latlng.lat, lng:e.latlng.lng}, true); }); // долгое нажатие
 map.on("click", e => { if (!picking) return; picking = false; hint(""); setNear({lat:e.latlng.lat, lng:e.latlng.lng}, true); });
 $("#bLoc").onclick = () => fitAll();
 function fitAll(){ const b = L.latLngBounds(visible.length ? visible.map(z=>[z.lat,z.lng]) : DATA.map(z=>[z.lat,z.lng])); map.fitBounds(b, { padding:[30,30] }); }
 
+const EMIL_HTML = big => `<div class="emil ${big?"big":""}"><img src="emil.jpg" alt="Эмиль"><div><b>Эмиль</b><span>Агент по новостройкам Хабаровска. Подберу квартиру под бюджет, проверю застройщика и посчитаю ипотеку. Отвечаю лично.</span></div></div>`;
 /* ---------- меню и вход для Эмиля ---------- */
 const store = {
   get: k => new Promise(res => { if (TG && TG.CloudStorage && TG.isVersionAtLeast && TG.isVersionAtLeast("6.9")) TG.CloudStorage.getItem(k, (e,v)=>res(v||null)); else { try { res(localStorage.getItem(k)); } catch(e){ res(null); } } }),
@@ -565,7 +599,7 @@ async function decrypt(pw){
   return JSON.parse(new TextDecoder().decode(pt));
 }
 $("#bMenu").onclick = () => {
-  const body = `
+  const body = `${EMIL_HTML(true)}
     <div class="cta" style="margin-top:0">
       <button class="btn p" id="mEmil">Написать Эмилю</button>
       <button class="btn s" id="mAll">Показать весь город</button>
