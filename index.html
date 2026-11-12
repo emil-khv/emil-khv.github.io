@@ -101,6 +101,32 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .leaflet-tile-pane{filter:saturate(.75) contrast(.95)}
 [data-theme=dark] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.6)}
 .target{width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 0 0 2px var(--accent),0 2px 8px rgba(0,0,0,.4);transform:translate(-50%,-50%);position:absolute}
+.favb{width:32px;height:32px;border-radius:50%;background:var(--bg2);display:grid;place-items:center;flex:none;font-size:17px;color:#e5484d}
+.mort{background:var(--bg2);border-radius:16px;padding:12px;margin:14px 0 4px}
+.mort h3{margin:0 0 8px;font-size:15px}
+.seg{display:flex;background:var(--bg);border-radius:12px;padding:3px;gap:3px;margin-bottom:10px}
+.seg button{flex:1;height:34px;border-radius:9px;font-weight:600;font-size:13px}
+.seg button.on{background:var(--accent);color:var(--accentText)}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 2px;font-size:13px;color:var(--muted)}
+.mrow b{color:var(--text);font-size:14px}
+.mopts{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}
+.mopts button{height:30px;padding:0 11px;border-radius:15px;background:var(--bg);font-size:13px;font-weight:600}
+.mopts button.on{background:var(--accent);color:var(--accentText)}
+.pay{font-size:24px;font-weight:800;margin:10px 0 2px}
+.pay small{font-size:14px;font-weight:600;color:var(--muted)}
+.mnote{font-size:12px;color:var(--muted);line-height:1.4;margin-top:6px}
+.mwarn{font-size:12.5px;background:rgba(245,190,40,.18);border-radius:10px;padding:7px 9px;margin-top:8px;line-height:1.4}
+details.who{margin-top:8px;font-size:13px}
+details.who summary{cursor:pointer;font-weight:600;color:var(--accent)}
+details.who ul{margin:6px 0 0;padding-left:18px;color:var(--text)}
+details.who li{margin:2px 0}
+.near{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0 4px}
+.near div{background:var(--bg2);border-radius:12px;padding:7px 8px;font-size:12px;color:var(--muted);line-height:1.25}
+.near b{display:block;color:var(--text);font-size:14px}
+.cmp{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
+.cmp th,.cmp td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.cmp th{font-weight:600;color:var(--muted);width:30%}
+.cmpw{overflow-x:auto}
 .load{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:var(--bg);font-weight:600;color:var(--muted)}
 </style>
 </head>
@@ -139,7 +165,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 
 <div class="sheet" id="sheet">
   <div class="grab"></div>
-  <div class="sh-head"><h2 id="shTitle"></h2><button class="x" id="shClose" aria-label="Закрыть">✕</button></div>
+  <div class="sh-head"><h2 id="shTitle"></h2><span id="shExtra"></span><button class="x" id="shClose" aria-label="Закрыть">✕</button></div>
   <div class="sh-body" id="shBody"></div>
 </div>
 
@@ -251,7 +277,8 @@ function renderModes(){
   const keys = Object.keys(MODES).filter(k => !MODES[k].priv || PRIV);
   $("#modes").innerHTML = keys.map(k => `<button class="chip ${S.mode===k?"on":""}" data-m="${k}">${MODES[k].label}</button>`).join("")
     + (S.mode==="ppm" ? `<button class="chip ${S.heat?"on":""}" data-heat="1">Тепловой слой</button>` : "")
-    + `<button class="chip ${S.offers?"on":""}" data-offers="1">★ Акции</button>`;
+    + `<button class="chip ${S.offers?"on":""}" data-offers="1">★ Акции</button>`
+    + (FAV.length ? `<button class="chip" data-fav="1" style="color:#e5484d">♥ Избранное ${FAV.length}</button>` : "");
 }
 function renderLegend(){
   const md = MODES[S.mode]; let h = "";
@@ -263,8 +290,8 @@ function renderLegend(){
 
 /* ---------- шторка ---------- */
 let sheetKind = null;
-function openSheet(title, body, kind){
-  $("#shTitle").innerHTML = title; $("#shBody").innerHTML = body; $("#shBody").scrollTop = 0;
+function openSheet(title, body, kind, extra){
+  $("#shExtra").innerHTML = extra || ""; $("#shTitle").innerHTML = title; $("#shBody").innerHTML = body; $("#shBody").scrollTop = 0;
   $("#sheet").classList.add("open"); sheetKind = kind;
   if (TG && TG.BackButton) { try { TG.BackButton.show(); } catch(e){} }
 }
@@ -312,14 +339,18 @@ function openCard(id){
     ${rooms ? `<div class="rooms">${rooms}</div>` : ""}
     <div class="note">Отделка: ${esc(fin)}${sale ? " · квартир в продаже: " + z.flats : ""}</div>
     <div class="note">${esc(z.addr || "")}</div>
+    ${nearHtml(z)}
     ${priv}
     <div class="cta">
       <button class="btn p" id="cDet">Узнать подробности у Эмиля</button>
       <button class="btn s" id="cPlan">Планировки и актуальные цены</button>
-      <button class="btn s" id="cNear">Что ещё рядом</button>
     </div>
+    ${sale && Object.keys(z.rooms||{}).length ? '<div class="mort" id="mort"></div>' : ""}
+    <div class="cta"><button class="btn s" id="cNear">Что ещё рядом с этим ЖК</button></div>
     <div class="foot">Цены и наличие на ${esc(META.updated)} по данным открытых источников. Цена м² - оценка по диапазону цен и площадей. Точные условия и свободные квартиры Эмиль проверит под вас.</div>`;
-  openSheet(`${esc(z.name)}<div class="sub">${esc([z.brand, z.district + (z.mkr && !z.district.includes("мкр") ? ", " + z.mkr.replace(" м-н","") : "")].filter(Boolean).join(" · "))}</div>`, body, "card");
+  openSheet(`${esc(z.name)}<div class="sub">${esc([z.brand, z.district + (z.mkr && !z.district.includes("мкр") ? ", " + z.mkr.replace(" м-н","") : "")].filter(Boolean).join(" · "))}</div>`, body, "card", `<button class="favb" id="cFav" aria-label="В избранное">${FAV.includes(z.id)?"♥":"♡"}</button>`);
+  $("#cFav").onclick = () => { toggleFav(z.id); $("#cFav").textContent = FAV.includes(z.id)?"♥":"♡"; };
+  if ($("#mort")) mortInit(z);
   $("#cDet").onclick = () => ask(z, "d");
   $("#cPlan").onclick = () => ask(z, "p");
   $("#cNear").onclick = () => { S.q = ""; $("#q").value = ""; setNear({lat:z.lat, lng:z.lng}, true); };
@@ -343,6 +374,109 @@ $("#shBody").addEventListener("click", e => {
   const r = e.target.closest("[data-r]"); if (r) { const v = +r.dataset.r; if (!v) { setNear(null); closeSheet(); } else { S.radius = v; setNear(S.near, true); } }
 });
 $("#bList").onclick = openList;
+
+/* ---------- что рядом ---------- */
+function nearHtml(z){
+  const n = z.near; if (!n) return "";
+  const m = v => v == null ? "нет в 1 км" : (v < 1000 ? Math.round(v/10)*10 + " м" : (v/1000).toFixed(1).replace(".",",") + " км");
+  const cell = (k, label) => n[k] ? `<div><b>${n[k][1] || 0}</b>${label}<br>ближ. ${m(n[k][2])}</div>` : "";
+  return `<div class="sec" style="margin-top:12px">Рядом, в радиусе 1 км</div><div class="near">
+    ${cell("school","школ")}${cell("kg","детсадов")}${cell("shop","магазинов")}${cell("stop","остановок")}${cell("med","поликл./аптек")}${cell("park","парков, площадок")}</div>
+    <div class="mnote">По OpenStreetMap, расстояние по прямой. Закреплённую школу и сад уточнит Эмиль.</div>`;
+}
+
+/* ---------- ипотека ---------- */
+const MORT = {
+  updated: "12.11.2026", pvMin: 20,
+  dv:  { rate: 2, years: 20, lim: 6, limBig: 9 },
+  fam: { years: 30, pref: 15, kids: { 1:[10,6], 2:[8,8], 3:[6,10], 4:[4,10], 5:[2,10] } },
+  mkt: { rate: 20, min: 15, max: 24, years: 30 }
+};
+const MS = { prog: "dv", room: null, pv: 20, kids: 1, mrate: MORT.mkt.rate };
+function annuity(loan, ratePct, years){ const n = years*12, r = ratePct/1200; return r ? loan*r/(1-Math.pow(1+r,-n)) : loan/n; }
+const rub = v => Math.round(v).toLocaleString("ru-RU").replace(/,/g," ") + " ₽";
+const mln = v => fmtM(v/1e6) + " млн";
+function mortInit(z){
+  const keys = Object.keys(z.rooms||{}); if (!MS.room || !keys.includes(MS.room)) MS.room = keys.includes("2") ? "2" : keys.includes("1") ? "1" : keys[0];
+  mortRender(z);
+}
+function mortRender(z){
+  const ROOMN = {st:"Студия","1":"1к","2":"2к","3":"3к","4":"4к","5":"5к"};
+  const price = (z.rooms[MS.room] || z.pmin) * 1e6;
+  let rate, years, limit, warn = "", extra = "";
+  const bigRoom = !(MS.room === "st" || MS.room === "1");
+  if (MS.prog === "dv") {
+    rate = MORT.dv.rate; years = MORT.dv.years; limit = MORT.dv.lim;
+    if (bigRoom && z.amax >= 60) warn = `Если квартира от 60 м², лимит может быть до ${MORT.dv.limBig} млн. Но в зоне 60-65 м² всё решает площадь балкона: проходит под 6 или под 9 млн - уточни у Эмиля, проверит конкретную квартиру.`;
+    extra = `<details class="who"><summary>Подхожу ли я под ДВ-ипотеку?</summary><ul>
+      <li>Молодая семья, оба супруга до 36 лет</li><li>Одинокий родитель до 36 лет с ребёнком</li>
+      <li>Многодетные, если 3-й или следующий ребёнок родился с 2024 года</li>
+      <li>Медики, педагоги, работники ОПК и соцзащиты (госучреждения)</li>
+      <li>Участники СВО и их семьи</li><li>Участники «Дальневосточного гектара», переселенцы по программам мобильности</li></ul>
+      <div class="mnote">Ставка 2% (около 3% без страхования жизни), срок до 20 лет, взнос от 20%, прописаться в квартире и прожить 5 лет. Только у застройщика, переуступка не подходит.</div></details>`;
+  } else if (MS.prog === "fam") {
+    const k = MORT.fam.kids[MS.kids]; rate = k[0]; limit = k[1]; years = MORT.fam.years;
+    extra = `<div class="mrow">Детей в семье</div><div class="mopts">${[1,2,3,4,5].map(n=>`<button data-kids="${n}" class="${MS.kids===n?"on":""}">${n===5?"5+":n}</button>`).join("")}</div>
+      <div class="mnote">Ставка ${rate}%, лимит ${limit} млн. Нужен ребёнок до 7 лет. Льготная ставка первые ${MORT.fam.pref} лет, дальше рыночная. Супруги оформляют вместе.</div>`;
+  } else {
+    rate = MS.mrate; years = MORT.mkt.years; limit = Infinity;
+    extra = `<div class="mrow">Ставка банка <b>${String(rate).replace(".",",")}%</b></div>
+      <input type="range" id="mRate" min="${MORT.mkt.min}" max="${MORT.mkt.max}" step="0.5" value="${rate}">
+      <div class="mnote">Ставки банков разные, примерно ${MORT.mkt.min}-${MORT.mkt.max}%. Здесь средняя - подвигай под свой банк.</div>`;
+  }
+  let pvSum = price * MS.pv / 100, loan = price - pvSum;
+  if (loan > limit*1e6) { loan = limit*1e6; pvSum = price - loan; warn = `Кредит упирается в лимит программы ${limit} млн, остальное - взносом: ${mln(pvSum)}. ` + warn; }
+  const pay = annuity(loan, rate, years);
+  $("#mort").innerHTML = `<h3>Сколько платить в месяц</h3>
+    <div class="seg">${[["dv","ДВ 2%"],["fam","Семейная"],["mkt","Обычная"]].map(([k,l])=>`<button data-prog="${k}" class="${MS.prog===k?"on":""}">${l}</button>`).join("")}</div>
+    <div class="mrow">Квартира</div><div class="mopts">${Object.keys(z.rooms).map(k=>`<button data-room="${k}" class="${MS.room===k?"on":""}">${ROOMN[k]||k} от ${fmtM(z.rooms[k])}</button>`).join("")}</div>
+    <div class="mrow">Первый взнос <b>${MS.pv}% · ${mln(price*MS.pv/100)}</b></div>
+    <input type="range" id="mPv" min="${MORT.pvMin}" max="90" step="5" value="${MS.pv}">
+    ${extra}
+    <div class="pay">≈ ${rub(pay)} <small>/ мес</small></div>
+    <div class="mnote">Кредит ${mln(loan)} на ${years} лет под ${String(rate).replace(".",",")}% · цена от ${mln(price)}</div>
+    ${warn ? `<div class="mwarn">${warn}</div>` : ""}
+    <div class="mnote">Расчёт примерный: итог зависит от банка, страховки, точной цены и площади квартиры. Условия программ на ${MORT.updated}.</div>
+    <div class="cta"><button class="btn p" id="mAsk">Точный расчёт у Эмиля</button></div>`;
+  const box = $("#mort");
+  box.querySelectorAll("[data-prog]").forEach(b => b.onclick = () => { MS.prog = b.dataset.prog; mortRender(z); });
+  box.querySelectorAll("[data-room]").forEach(b => b.onclick = () => { MS.room = b.dataset.room; mortRender(z); });
+  box.querySelectorAll("[data-kids]").forEach(b => b.onclick = () => { MS.kids = +b.dataset.kids; mortRender(z); });
+  $("#mPv").oninput = e => { MS.pv = +e.target.value; mortRender(z); };
+  if ($("#mRate")) $("#mRate").oninput = e => { MS.mrate = +e.target.value; mortRender(z); };
+  $("#mAsk").onclick = () => ask(z, "i");
+}
+
+/* ---------- избранное ---------- */
+let FAV = [];
+function saveFav(){ store.set("fav", FAV.join(",")); }
+function toggleFav(id){
+  FAV = FAV.includes(id) ? FAV.filter(x=>x!==id) : [...FAV, id].slice(-12);
+  saveFav(); try { TG && TG.HapticFeedback && TG.HapticFeedback.selectionChanged(); } catch(e){}
+  renderModes();
+}
+function openFav(){
+  const arr = FAV.map(id => DATA.find(z=>z.id===id)).filter(Boolean);
+  if (!arr.length) { openSheet("Избранное", '<div class="empty">Пока пусто. Жми ♡ в карточке ЖК, чтобы отложить.</div>', "fav"); return; }
+  const sd = z => z.status === "сдан" ? "сдан" : (z.year ? (z.q ? z.q+" кв. " : "") + z.year : "-");
+  const rows = [
+    ["Цена от", z => z.pmin ? fmtM(z.pmin)+" млн" : "-"],
+    ["≈ м²", z => z.ppm ? z.ppm+" тыс" : "-"],
+    ["Сдача", sd],
+    ["Район", z => esc(z.district)],
+    ["Отделка", z => z.finish.length ? z.finish.join(", ") : "уточнить"],
+    ["Школ / садов в 1 км", z => z.near ? `${(z.near.school||[])[1]||0} / ${(z.near.kg||[])[1]||0}` : "-"],
+    ["Акция", z => z.offer && z.offerUntil >= TODAY ? "★ есть" : "-"]
+  ];
+  const cmp = `<div class="cmpw"><table class="cmp"><tr><th></th>${arr.map(z=>`<td><b>${esc(z.name)}</b></td>`).join("")}</tr>
+    ${rows.map(([n,f]) => `<tr><th>${n}</th>${arr.map(z=>`<td>${f(z)}</td>`).join("")}</tr>`).join("")}</table></div>`;
+  openSheet(`Избранное<div class="sub">${arr.length} ЖК · сравнение</div>`,
+    `${arr.length > 1 ? cmp : ""}<div class="list">${arr.map(itemRow).join("")}</div>
+     <div class="cta"><button class="btn p" id="favSend">Отправить подборку Эмилю</button><button class="btn s" id="favClear">Очистить</button></div>
+     <div class="mnote">Эмиль посмотрит выбранные ЖК, проверит свободные квартиры и условия и напишет тебе.</div>`, "fav");
+  $("#favSend").onclick = () => { const url = `https://t.me/${BOT}?start=fav_${FAV.slice(0,12).join("-")}`; TG ? TG.openTelegramLink(url) : window.open(url,"_blank"); };
+  $("#favClear").onclick = () => { FAV = []; saveFav(); renderModes(); closeSheet(); };
+}
 
 /* ---------- фильтры UI ---------- */
 function openFilters(){
@@ -387,6 +521,7 @@ $("#modes").addEventListener("click", e => {
   if (b.dataset.m) S.mode = b.dataset.m;
   if (b.dataset.heat) S.heat = !S.heat;
   if (b.dataset.offers) S.offers = !S.offers;
+  if (b.dataset.fav) { openFav(); return; }
   render();
 });
 let qt; $("#q").addEventListener("input", e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value.trim().toLowerCase(); render();
@@ -457,6 +592,7 @@ $("#bMenu").onclick = () => {
     if (ps.length > 5) { PPM_LO = Math.round(ps[Math.floor(ps.length*.05)]/10)*10; PPM_HI = Math.round(ps[Math.floor(ps.length*.92)]/10)*10; }
     render(); fitAll();
     $("#load").remove();
+    const fv = await store.get("fav"); if (fv) { FAV = fv.split(",").map(Number).filter(id => DATA.some(z=>z.id===id)); renderModes(); }
     const pw = await store.get("mp");
     if (pw) { try { PRIV = await decrypt(pw); render(); } catch(e){ store.set("mp",""); } }
     // ссылка вида ?zk=12 открывает карточку
