@@ -398,6 +398,7 @@ function openCard(id){
     ${rooms ? `<div class="rooms">${rooms}</div>` : ""}
     <div class="note">Отделка: ${esc(fin)}${sale ? " · квартир в продаже: " + z.flats : ""}</div>
     <div class="note">${esc(z.addr || "")}</div>
+    ${domrfHtml(z)}
     ${trustHtml(z)}
     ${nearHtml(z)}
     ${priv}
@@ -437,6 +438,23 @@ $("#shBody").addEventListener("click", e => {
 $("#bList").onclick = openList;
 
 /* ---------- индекс по открытым данным (ЕРЗ.РФ) ---------- */
+/* ---------- ДОМ.РФ ---------- */
+function domrfHtml(z){
+  const d = z.domrf; if (!d) return "";
+  const q = d.q, qr = (n,t) => n ? `${t} — ${n}` : "";
+  const moved = d.was[0] !== d.now[0];
+  return `<div class="trust"><h3>Данные ДОМ.РФ <b style="font-size:13px;color:${d.pr ? "#d64545" : "#2e9d5b"}">${d.pr ? "проблемный объект" : "не проблемный"}</b></h3>
+    <div class="tbar"><i style="width:${d.so}%;background:#4a7bd8"></i></div>
+    <div class="trow"><span>Распродано квартир</span><b>${d.so}%</b></div>
+    <div class="trow"><span>Средняя цена м² по ДОМ.РФ</span><b>${Math.round(d.ap/1000)} тыс ₽</b></div>
+    <div class="trow"><span>Срок ввода: обещали → сейчас</span><b style="color:${moved ? "#d64545" : "inherit"}">${d.was[0]} → ${d.now[0]}${moved ? " (перенос)" : ""}</b></div>
+    <div class="trow"><span>Ввод по данным ДОМ.РФ</span><b>${d.de}</b></div>
+    <div class="trow"><span>Выдача ключей</span><b>до ${d.kt}</b></div>
+    <div class="trow"><span>Квартиры в доме</span><b>${[qr(q[0],"1к"),qr(q[1],"2к"),qr(q[2],"3к"),qr(q[3],"4к")].filter(Boolean).join(", ")}, ср. ${String(q[5]).replace(".", ",")} м²</b></div>
+    <div class="trow"><span>Класс / эскроу</span><b>${esc(d.cl)} / ${d.es ? "да" : "нет"}</b></div>
+    <div class="mnote">По одному корпусу ЖК (дом №${d.o} в реестре ДОМ.РФ). «Обещали» — проектная декларация от ${d.was[1]}, «сейчас» — от ${d.now[1]}. Данные наш.дом.рф на ${esc(META.domrfDate||"")}, это не гарантия.</div>
+  </div>`;
+}
 function trustOf(z){
   const e = z.erz; if (!e) return null;
   const done = z.status === "сдан" || z.status === "частично сдан";
@@ -706,6 +724,7 @@ $("#bMenu").onclick = () => {
   try {
     const d = await fetch("data/zk.json?" + Date.now()).then(r=>r.json());
     DATA = d.items; META = d.meta;
+    try { const dr = await fetch("data/domrf.json?" + Date.now()).then(r => r.ok ? r.json() : null); if (dr && dr.items) { META.domrfDate = dr.date; DATA.forEach(z => { if (dr.items[z.id]) z.domrf = dr.items[z.id]; }); } } catch(e){}
     try { const nb = await fetch("data/nearby.json?" + Date.now()).then(r => r.ok ? r.json() : null); if (nb && nb.near) DATA.forEach(z => { if (nb.near[z.id]) z.near = nb.near[z.id]; }); } catch(e){}
     const ps = DATA.map(z=>z.ppm).filter(Boolean).sort((a,b)=>a-b);
     if (ps.length > 5) { PPM_LO = Math.round(ps[Math.floor(ps.length*.05)]/10)*10; PPM_HI = Math.round(ps[Math.floor(ps.length*.92)]/10)*10; }
