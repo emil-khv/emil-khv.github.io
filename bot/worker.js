@@ -29,7 +29,7 @@ async function tg(env, method, body) {
 
 // ---- /osm: разовая выгрузка инфраструктуры из OpenStreetMap (команда только для Эмиля) ----
 const OSM_BBOX = "48.30,134.90,48.65,135.30";
-const OSM_Q = "[out:csv(::lat,::lon,amenity,shop,highway,railway,leisure;false;\"|\")][timeout:120];(" +
+const OSM_Q = "[out:csv(::lat,::lon,amenity,shop,highway,railway,leisure;false;\"|\")][timeout:25];(" +
   "nwr[amenity~\"^(school|kindergarten|clinic|hospital|doctors|pharmacy)$\"](" + OSM_BBOX + ");" +
   "nwr[shop~\"^(supermarket|convenience|mall)$\"](" + OSM_BBOX + ");" +
   "node[highway=bus_stop](" + OSM_BBOX + ");node[railway=tram_stop](" + OSM_BBOX + ");" +
@@ -39,15 +39,15 @@ const OSM_EPS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.r
 
 async function osmRun(env) {
   const zk = (await fetch(MAP_URL + "data/zk.json").then((r) => r.json())).items;
-  let txt = null, used = ""; const errs = [];
-  for (const e of OSM_EPS) {
-    try {
-      const r = await fetch(e, { method: "POST", body: "data=" + encodeURIComponent(OSM_Q), headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "emil-khv-map/1.0" } });
-      if (r.ok) { txt = await r.text(); used = e; break; }
-      else errs.push(e.split("/")[2] + " " + r.status);
-    } catch (x) { errs.push(e.split("/")[2] + " " + x.message); }
-  }
-  if (!txt) throw new Error("OpenStreetMap не ответил: " + errs.join("; "));
+  const errs = [];
+  const tries = OSM_EPS.map((e) => {
+    const c = new AbortController(); setTimeout(() => c.abort(), 25000);
+    return fetch(e, { method: "POST", signal: c.signal, body: "data=" + encodeURIComponent(OSM_Q), headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "emil-khv-map/1.0 (t.me/emilenin)" } })
+      .then((r) => r.ok ? r.text().then((t) => [t, e]) : Promise.reject(e.split("/")[2] + " " + r.status))
+      .catch((x) => { const m = typeof x === "string" ? x : e.split("/")[2] + " " + (x.name === "AbortError" ? "нет ответа 25 с" : x.message); errs.push(m); throw m; });
+  });
+  let txt, used;
+  try { [txt, used] = await Promise.any(tries); } catch (x) { throw new Error("OpenStreetMap не ответил: " + errs.join("; ")); }
   const K = ["school", "kg", "shop", "stop", "med", "park"];
   const pts = [];
   for (const line of txt.split("\n")) {
@@ -209,12 +209,6 @@ export default {
       return new Response("forbidden", { status: 403 });
     }
     const update = await request.json();
-    const t = update.message && update.message.text;
-    if (t === "/osm") {
-      // долгая разовая задача: выполняем до ответа, чтобы её не оборвал лимит фоновой работы
-      await handle(update, env).catch((e) => console.log("err", e && e.stack));
-      return new Response("ok");
-    }
     ctx.waitUntil(handle(update, env).catch((e) => console.log("err", e && e.stack)));
     return new Response("ok");
   },
