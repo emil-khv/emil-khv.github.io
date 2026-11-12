@@ -35,18 +35,19 @@ const OSM_Q = "[out:csv(::lat,::lon,amenity,shop,highway,railway,leisure;false;\
   "node[highway=bus_stop](" + OSM_BBOX + ");node[railway=tram_stop](" + OSM_BBOX + ");" +
   "nwr[leisure~\"^(park|playground|sports_centre|fitness_centre)$\"](" + OSM_BBOX + ");" +
   ");out center;";
-const OSM_EPS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+const OSM_EPS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
 
 async function osmRun(env) {
   const zk = (await fetch(MAP_URL + "data/zk.json").then((r) => r.json())).items;
-  let txt = null, used = "";
+  let txt = null, used = ""; const errs = [];
   for (const e of OSM_EPS) {
     try {
       const r = await fetch(e, { method: "POST", body: "data=" + encodeURIComponent(OSM_Q), headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "emil-khv-map/1.0" } });
       if (r.ok) { txt = await r.text(); used = e; break; }
-    } catch (x) {}
+      else errs.push(e.split("/")[2] + " " + r.status);
+    } catch (x) { errs.push(e.split("/")[2] + " " + x.message); }
   }
-  if (!txt) throw new Error("OpenStreetMap не ответил");
+  if (!txt) throw new Error("OpenStreetMap не ответил: " + errs.join("; "));
   const K = ["school", "kg", "shop", "stop", "med", "park"];
   const pts = [];
   for (const line of txt.split("\n")) {
@@ -123,7 +124,8 @@ async function handle(update, env) {
   if (String(u.id) === admin && text === "/osm") {
     await tg(env, "sendMessage", { chat_id: admin, text: "Выгружаю школы, сады, магазины и остановки из OpenStreetMap..." });
     let res;
-    try { res = "Готово: " + (await osmRun(env)); } catch (e) { res = "Не получилось: " + e.message; }
+    const t0 = Date.now();
+    try { res = "Готово: " + (await osmRun(env)) + ", " + Math.round((Date.now() - t0) / 1000) + " с"; } catch (e) { res = "Не получилось: " + e.message; }
     await tg(env, "sendMessage", { chat_id: admin, text: res });
     return;
   }
@@ -207,6 +209,12 @@ export default {
       return new Response("forbidden", { status: 403 });
     }
     const update = await request.json();
+    const t = update.message && update.message.text;
+    if (t === "/osm") {
+      // долгая разовая задача: выполняем до ответа, чтобы её не оборвал лимит фоновой работы
+      await handle(update, env).catch((e) => console.log("err", e && e.stack));
+      return new Response("ok");
+    }
     ctx.waitUntil(handle(update, env).catch((e) => console.log("err", e && e.stack)));
     return new Response("ok");
   },
