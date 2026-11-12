@@ -140,6 +140,19 @@ details.who li{margin:2px 0}
 .cmp th,.cmp td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 .cmp th{font-weight:600;color:var(--muted);width:30%}
 .cmpw{overflow-x:auto}
+.favfab{color:#e5484d;font-size:22px}
+.favfab.pulse{animation:pulse .5s ease}
+@keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.25)}100%{transform:scale(1)}}
+.toast{position:fixed;left:50%;top:calc(104px + env(safe-area-inset-top));transform:translateX(-50%) translateY(-12px);z-index:3000;background:#14161a;color:#fff;border-radius:14px;padding:11px 16px;font-size:14px;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;max-width:90vw;text-align:center}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.btn.done{background:#26b068!important;color:#fff!important}
+.cmpw{overflow-x:auto;margin:0 -16px;padding:0 16px}
+.cmp{min-width:100%;width:max-content}
+.cmp th{position:sticky;left:0;background:var(--bg);z-index:1;min-width:108px;max-width:120px}
+.cmp td{min-width:120px;max-width:150px}
+.cmp tr.grp th{color:var(--accent);text-transform:uppercase;font-size:11px;letter-spacing:.05em;padding-top:14px;border-bottom:0}
+.cmp tr.grp td{border-bottom:0}
+.cmp .best{color:#26b068;font-weight:700}
 .load{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:var(--bg);font-weight:600;color:var(--muted)}
 </style>
 </head>
@@ -169,11 +182,13 @@ details.who li{margin:2px 0}
 <button class="count" id="bList"><span id="cnt">0</span>&nbsp;ЖК · списком</button>
 <button class="nearbtn" id="bNear">📍 Рядом с точкой</button>
 <div class="fab">
+  <button class="ibtn favfab" id="bFav" aria-label="Избранное">♡<span class="badge" id="favN" hidden>0</span></button>
   <button class="ibtn" id="bLoc" aria-label="Весь город">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
   </button>
 </div>
 
+<div class="toast" id="toast"></div>
 <div class="sheet" id="sheet">
   <div class="grabzone" id="grab"><div class="grab"></div></div>
   <div class="sh-head"><h2 id="shTitle"></h2><span id="shExtra"></span><button class="x" id="shClose" aria-label="Закрыть">✕</button></div>
@@ -330,11 +345,21 @@ $("#shClose").onclick = closeSheet;
 })();
 if (TG && TG.BackButton) TG.BackButton.onClick(closeSheet);
 
-function ask(z, kind){
-  const url = `https://t.me/${BOT}?start=zk${z.id}_${kind}`;
-  if (TG) { try { TG.HapticFeedback && TG.HapticFeedback.impactOccurred("light"); } catch(e){} TG.openTelegramLink(url); }
-  else window.open(url, "_blank");
+let toastT;
+function toast(t){ const el = $("#toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(()=>el.classList.remove("on"), 3200); }
+const SENT = {};
+function openTg(url){ if (TG) TG.openTelegramLink(url); else window.open(url, "_blank"); }
+function sendToEmil(param, btn, label){
+  if (SENT[param] && Date.now() - SENT[param] < 120000) { toast("Уже отправлено - Эмиль скоро ответит в чате с ботом"); return; }
+  SENT[param] = Date.now();
+  try { TG && TG.HapticFeedback && TG.HapticFeedback.notificationOccurred("success"); } catch(e){}
+  if (btn) { const old = btn.textContent; btn.textContent = "✓ " + (label || "Отправлено Эмилю"); btn.classList.add("done"); btn.disabled = true;
+    setTimeout(()=>{ btn.textContent = old; btn.classList.remove("done"); btn.disabled = false; }, 4000); }
+  toast("✓ Отправлено Эмилю. Ответ придёт в чат с ботом");
+  setTimeout(() => openTg(`https://t.me/${BOT}?start=${param}`), 450);
 }
+const EMIL_DM = "https://t.me/emilenin";
+function ask(z, kind, btn){ sendToEmil(`zk${z.id}_${kind}`, btn, "Заявка отправлена"); }
 
 function openCard(id){
   const z = DATA.find(x => x.id === id); if (!z) return;
@@ -372,6 +397,7 @@ function openCard(id){
     <div class="cta" style="margin-top:4px">
       <button class="btn p" id="cDet">Узнать подробности у Эмиля</button>
       <button class="btn s" id="cPlan">Планировки и актуальные цены</button>
+      <button class="btn s" id="cDm">Написать Эмилю в личку</button>
     </div>
     ${sale && Object.keys(z.rooms||{}).length ? '<div class="mort" id="mort"></div>' : ""}
     <div class="cta"><button class="btn s" id="cNear">Что ещё рядом с этим ЖК</button></div>
@@ -379,8 +405,9 @@ function openCard(id){
   openSheet(`${esc(z.name)}<div class="sub">${esc([z.brand, z.district + (z.mkr && !z.district.includes("мкр") ? ", " + z.mkr.replace(" м-н","") : "")].filter(Boolean).join(" · "))}</div>`, body, "card", `<button class="favb" id="cFav" aria-label="В избранное">${FAV.includes(z.id)?"♥":"♡"}</button>`);
   $("#cFav").onclick = () => { toggleFav(z.id); $("#cFav").textContent = FAV.includes(z.id)?"♥":"♡"; };
   if ($("#mort")) mortInit(z);
-  $("#cDet").onclick = () => ask(z, "d");
-  $("#cPlan").onclick = () => ask(z, "p");
+  $("#cDet").onclick = e => ask(z, "d", e.currentTarget);
+  $("#cPlan").onclick = e => ask(z, "p", e.currentTarget);
+  $("#cDm").onclick = () => openTg(EMIL_DM);
   $("#cNear").onclick = () => { S.q = ""; $("#q").value = ""; setNear({lat:z.lat, lng:z.lng}, true); };
   map.panTo([z.lat - (map.getBounds().getNorth()-map.getBounds().getSouth())*0.18, z.lng], { animate:true });
 }
@@ -474,7 +501,7 @@ function mortRender(z){
   box.querySelectorAll("[data-kids]").forEach(b => b.onclick = () => { MS.kids = +b.dataset.kids; mortRender(z); });
   $("#mPv").oninput = e => { MS.pv = +e.target.value; mortRender(z); };
   if ($("#mRate")) $("#mRate").oninput = e => { MS.mrate = +e.target.value; mortRender(z); };
-  $("#mAsk").onclick = () => ask(z, "i");
+  $("#mAsk").onclick = e => ask(z, "i", e.currentTarget);
 }
 
 /* ---------- избранное ---------- */
@@ -482,30 +509,53 @@ let FAV = [];
 function saveFav(){ store.set("fav", FAV.join(",")); }
 function toggleFav(id){
   FAV = FAV.includes(id) ? FAV.filter(x=>x!==id) : [...FAV, id].slice(-12);
-  saveFav(); try { TG && TG.HapticFeedback && TG.HapticFeedback.selectionChanged(); } catch(e){}
-  renderModes();
+  const added = FAV.includes(id);
+  saveFav(); try { TG && TG.HapticFeedback && TG.HapticFeedback.impactOccurred(added ? "medium" : "light"); } catch(e){}
+  renderModes(); updFavBtn(added);
+  toast(added ? `♥ В избранном (${FAV.length}). Сравнить - кнопка ♥ справа внизу` : "Убрано из избранного");
+}
+function updFavBtn(pulse){
+  const b = $("#bFav"); b.firstChild.nodeValue = FAV.length ? "♥" : "♡";
+  $("#favN").hidden = !FAV.length; $("#favN").textContent = FAV.length;
+  if (pulse) { b.classList.remove("pulse"); void b.offsetWidth; b.classList.add("pulse"); }
 }
 function openFav(){
   const arr = FAV.map(id => DATA.find(z=>z.id===id)).filter(Boolean);
-  if (!arr.length) { openSheet("Избранное", '<div class="empty">Пока пусто. Жми ♡ в карточке ЖК, чтобы отложить.</div>', "fav"); return; }
+  if (!arr.length) { openSheet("Избранное", '<div class="empty">Пока пусто. Открой любой ЖК и нажми ♡ рядом с названием - он появится здесь, и ЖК можно будет сравнить между собой.</div>', "fav"); return; }
   const sd = z => z.status === "сдан" ? "сдан" : (z.year ? (z.q ? z.q+" кв. " : "") + z.year : "-");
+  const nr = (k, i) => z => z.near && z.near[k] ? (i === 2 ? (z.near[k][2] == null ? "3+ км" : (z.near[k][2] < 1000 ? Math.round(z.near[k][2]/10)*10 + " м" : (z.near[k][2]/1000).toFixed(1).replace(".",",") + " км")) : z.near[k][1]) : "-";
+  const room = k => z => z.rooms && z.rooms[k] ? "от " + fmtM(z.rooms[k]) + " млн" : "нет";
+  const minOf = (f) => { const v = arr.map(f).filter(x => x != null); return v.length ? Math.min(...v) : null; };
+  const pMin = minOf(z => z.pmin), mMin = minOf(z => z.ppm);
   const rows = [
-    ["Цена от", z => z.pmin ? fmtM(z.pmin)+" млн" : "-"],
-    ["≈ м²", z => z.ppm ? z.ppm+" тыс" : "-"],
-    ["Сдача", sd],
-    ["Район", z => esc(z.district)],
+    ["Цены"],
+    ["Цена от", z => z.pmin ? `<span class="${z.pmin===pMin?"best":""}">${fmtM(z.pmin)} млн</span>` : "-"],
+    ["Цена до", z => z.pmax ? fmtM(z.pmax)+" млн" : "-"],
+    ["≈ цена м²", z => z.ppm ? `<span class="${z.ppm===mMin?"best":""}">${z.ppm} тыс</span>` : "-"],
+    ["Акция", z => z.offer && z.offerUntil >= TODAY ? "★ " + esc(z.offer.split(":")[0]) : "-"],
+    ["Квартиры"],
+    ["Площади", z => z.amin ? fmtM(z.amin)+"–"+fmtM(z.amax)+" м²" : "-"],
+    ["Студии", room("st")], ["1-комн.", room("1")], ["2-комн.", room("2")], ["3-комн.", room("3")], ["4+ комн.", z => z.rooms && (z.rooms["4"]||z.rooms["5"]) ? "от " + fmtM(z.rooms["4"]||z.rooms["5"]) + " млн" : "нет"],
+    ["В продаже", z => z.flats ? z.flats + " кв." : "-"],
+    ["ДВ до 9 млн", z => z.amax >= 60 ? "есть от 60 м², уточнить" : "до 6 млн"],
+    ["Дом"],
+    ["Сдача", sd], ["Статус", z => esc(z.status||"-")], ["Район", z => esc(z.district)],
     ["Отделка", z => z.finish.length ? z.finish.join(", ") : "уточнить"],
-    ["Школ / садов в 1 км", z => z.near ? `${(z.near.school||[])[1]||0} / ${(z.near.kg||[])[1]||0}` : "-"],
-    ["Акция", z => z.offer && z.offerUntil >= TODAY ? "★ есть" : "-"]
+    ["Рядом, в 1 км"],
+    ["Школы", nr("school",1)], ["Ближ. школа", nr("school",2)],
+    ["Детсады", nr("kg",1)], ["Ближ. детсад", nr("kg",2)],
+    ["Магазины", nr("shop",1)], ["Остановки", nr("stop",1)],
+    ["Поликл./аптеки", nr("med",1)], ["Парки, площадки", nr("park",1)]
   ];
   const cmp = `<div class="cmpw"><table class="cmp"><tr><th></th>${arr.map(z=>`<td><b>${esc(z.name)}</b></td>`).join("")}</tr>
-    ${rows.map(([n,f]) => `<tr><th>${n}</th>${arr.map(z=>`<td>${f(z)}</td>`).join("")}</tr>`).join("")}</table></div>`;
+    ${rows.map(([n,f]) => f ? `<tr><th>${n}</th>${arr.map(z=>`<td>${f(z)}</td>`).join("")}</tr>` : `<tr class="grp"><th>${n}</th>${arr.map(()=>"<td></td>").join("")}</tr>`).join("")}</table></div>
+    ${arr.length > 2 ? '<div class="mnote">← листай таблицу вбок →</div>' : ""}`;
   openSheet(`Избранное<div class="sub">${arr.length} ЖК · сравнение</div>`,
     `${arr.length > 1 ? cmp : ""}<div class="list">${arr.map(itemRow).join("")}</div>
      <div class="cta"><button class="btn p" id="favSend">Отправить подборку Эмилю</button><button class="btn s" id="favClear">Очистить</button></div>
      <div class="mnote">Эмиль посмотрит выбранные ЖК, проверит свободные квартиры и условия и напишет тебе.</div>`, "fav");
-  $("#favSend").onclick = () => { const url = `https://t.me/${BOT}?start=fav_${FAV.slice(0,12).join("-")}`; TG ? TG.openTelegramLink(url) : window.open(url,"_blank"); };
-  $("#favClear").onclick = () => { FAV = []; saveFav(); renderModes(); closeSheet(); };
+  $("#favSend").onclick = e => sendToEmil(`fav_${FAV.slice(0,12).join("-")}`, e.currentTarget, "Подборка отправлена");
+  $("#favClear").onclick = () => { FAV = []; saveFav(); renderModes(); updFavBtn(); closeSheet(); };
 }
 
 /* ---------- фильтры UI ---------- */
@@ -582,6 +632,7 @@ $("#bNear").onclick = () => {
 map.on("contextmenu", e => { picking = false; hint(""); setNear({lat:e.latlng.lat, lng:e.latlng.lng}, true); }); // долгое нажатие
 map.on("click", e => { if (!picking) return; picking = false; hint(""); setNear({lat:e.latlng.lat, lng:e.latlng.lng}, true); });
 $("#bLoc").onclick = () => fitAll();
+$("#bFav").onclick = () => openFav();
 function fitAll(){ const b = L.latLngBounds(visible.length ? visible.map(z=>[z.lat,z.lng]) : DATA.map(z=>[z.lat,z.lng])); map.fitBounds(b, { padding:[30,30] }); }
 
 const EMIL_HTML = big => `<div class="emil ${big?"big":""}"><img src="emil.jpg" alt="Эмиль"><div><b>Эмиль</b><span>Агент по новостройкам Хабаровска. Подберу квартиру под бюджет, проверю застройщика и посчитаю ипотеку. Отвечаю лично.</span></div></div>`;
@@ -601,7 +652,7 @@ async function decrypt(pw){
 $("#bMenu").onclick = () => {
   const body = `${EMIL_HTML(true)}
     <div class="cta" style="margin-top:0">
-      <button class="btn p" id="mEmil">Написать Эмилю</button>
+      <button class="btn p" id="mEmil">Написать Эмилю в личку</button>
       <button class="btn s" id="mAll">Показать весь город</button>
     </div>
     <div class="foot">Все новостройки Хабаровска на одной карте. Цены и наличие на ${esc(META.updated)}, обновляются раз в 2-4 недели. Цена за м² - оценка по диапазону цен и площадей ЖК, точные цены и свободные квартиры - у Эмиля.</div>
@@ -609,7 +660,7 @@ $("#bMenu").onclick = () => {
     ${PRIV ? `<div class="note">Вход выполнен: видны комиссии, контакты, режим «Комиссия».</div><button class="btn s" id="mOut" style="width:100%">Выйти</button>`
            : `<input class="pw" id="pw" type="password" placeholder="Пароль" autocomplete="current-password"><div class="err" id="pwErr"></div><button class="btn s" id="mIn" style="width:100%">Войти</button>`}`;
   openSheet("Карта новостроек Хабаровска", body, "menu");
-  $("#mEmil").onclick = () => { const u = `https://t.me/${BOT}?start=menu`; TG ? TG.openTelegramLink(u) : window.open(u,"_blank"); };
+  $("#mEmil").onclick = () => openTg(EMIL_DM);
   $("#mAll").onclick = () => { closeSheet(); fitAll(); };
   if ($("#mIn")) $("#mIn").onclick = async () => {
     $("#pwErr").textContent = "Проверяю…";
@@ -629,7 +680,7 @@ $("#bMenu").onclick = () => {
     if (ps.length > 5) { PPM_LO = Math.round(ps[Math.floor(ps.length*.05)]/10)*10; PPM_HI = Math.round(ps[Math.floor(ps.length*.92)]/10)*10; }
     render(); fitAll();
     $("#load").remove();
-    const fv = await store.get("fav"); if (fv) { FAV = fv.split(",").map(Number).filter(id => DATA.some(z=>z.id===id)); renderModes(); }
+    const fv = await store.get("fav"); if (fv) { FAV = fv.split(",").map(Number).filter(id => DATA.some(z=>z.id===id)); renderModes(); updFavBtn(); }
     const pw = await store.get("mp");
     if (pw) { try { PRIV = await decrypt(pw); render(); } catch(e){ store.set("mp",""); } }
     // ссылка вида ?zk=12 открывает карточку
