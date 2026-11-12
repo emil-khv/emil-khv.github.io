@@ -98,6 +98,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .foot{font-size:11px;color:var(--muted);margin-top:14px;line-height:1.4}
 .leaflet-control-attribution{font-size:9px!important;background:rgba(255,255,255,.6)!important}
 .leaflet-control-zoom{display:none}
+.leaflet-tile-pane{filter:saturate(.75) contrast(.95)}
+[data-theme=dark] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.6)}
 .target{width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 0 0 2px var(--accent),0 2px 8px rgba(0,0,0,.4);transform:translate(-50%,-50%);position:absolute}
 .load{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:var(--bg);font-weight:600;color:var(--muted)}
 </style>
@@ -192,8 +194,8 @@ const MODES = {
 
 /* ---------- карта ---------- */
 const map = L.map("map", { zoomControl:false, attributionControl:true, minZoom:10, maxZoom:18 }).setView([48.48,135.08], 12);
-L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? "dark_all" : "rastertiles/voyager"}/{z}/{x}/{y}{r}.png`, {
-  subdomains:"abcd", maxZoom:19, attribution:'&copy; OpenStreetMap, &copy; CARTO'
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
 let heat = null, markers = L.layerGroup().addTo(map), nearLayer = L.layerGroup().addTo(map);
 
