@@ -153,6 +153,13 @@ details.who li{margin:2px 0}
 .cmp tr.grp th{color:var(--accent);text-transform:uppercase;font-size:11px;letter-spacing:.05em;padding-top:14px;border-bottom:0}
 .cmp tr.grp td{border-bottom:0}
 .cmp .best{color:#26b068;font-weight:700}
+.trust{background:var(--bg2);border-radius:16px;padding:12px;margin:12px 0 4px}
+.trust h3{margin:0 0 6px;font-size:15px;display:flex;justify-content:space-between;align-items:baseline}
+.trust h3 b{font-size:22px}
+.tbar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin:4px 0 8px}
+.tbar i{display:block;height:100%;border-radius:5px}
+.trow{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+.trow span{color:var(--muted)}
 .load{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:var(--bg);font-weight:600;color:var(--muted)}
 </style>
 </head>
@@ -391,12 +398,12 @@ function openCard(id){
     ${rooms ? `<div class="rooms">${rooms}</div>` : ""}
     <div class="note">Отделка: ${esc(fin)}${sale ? " · квартир в продаже: " + z.flats : ""}</div>
     <div class="note">${esc(z.addr || "")}</div>
+    ${trustHtml(z)}
     ${nearHtml(z)}
     ${priv}
     ${EMIL_HTML(false)}
     <div class="cta" style="margin-top:4px">
       <button class="btn p" id="cDet">Узнать подробности у Эмиля</button>
-      <button class="btn s" id="cPlan">Планировки и актуальные цены</button>
       <button class="btn s" id="cDm">Написать Эмилю в личку</button>
     </div>
     ${sale && Object.keys(z.rooms||{}).length ? '<div class="mort" id="mort"></div>' : ""}
@@ -406,7 +413,6 @@ function openCard(id){
   $("#cFav").onclick = () => { toggleFav(z.id); $("#cFav").textContent = FAV.includes(z.id)?"♥":"♡"; };
   if ($("#mort")) mortInit(z);
   $("#cDet").onclick = e => ask(z, "d", e.currentTarget);
-  $("#cPlan").onclick = e => ask(z, "p", e.currentTarget);
   $("#cDm").onclick = () => openTg(EMIL_DM);
   $("#cNear").onclick = () => { S.q = ""; $("#q").value = ""; setNear({lat:z.lat, lng:z.lng}, true); };
   map.panTo([z.lat - (map.getBounds().getNorth()-map.getBounds().getSouth())*0.18, z.lng], { animate:true });
@@ -429,6 +435,25 @@ $("#shBody").addEventListener("click", e => {
   const r = e.target.closest("[data-r]"); if (r) { const v = +r.dataset.r; if (!v) { setNear(null); closeSheet(); } else { S.radius = v; setNear(S.near, true); } }
 });
 $("#bList").onclick = openList;
+
+/* ---------- индекс по открытым данным (ЕРЗ.РФ) ---------- */
+function trustOf(z){
+  const e = z.erz; if (!e) return null;
+  const done = z.status === "сдан" || z.status === "частично сдан";
+  const parts = [];
+  if (e.r != null) parts.push(["Соблюдение сроков застройщиком (ЕРЗ)", e.r / 5 * 50, 50, e.r + " из 5"]);
+  parts.push(["Без переносов сроков", (1 - e.p / 100) * 25, 25, e.p ? "перенесено " + String(e.p).replace(".", ",") + "%" : "переносов нет"]);
+  parts.push(["Статус дома", done ? 25 : 12.5, 25, done ? z.status : "строится"]);
+  return { score: e.r != null ? Math.round(parts.reduce((s,p)=>s+p[1],0)) : null, parts, e };
+}
+function trustHtml(z){
+  const t = trustOf(z); if (!t) return "";
+  const sc = t.score, col = sc == null ? "#9aa3ae" : grad(1 - sc/100);
+  return `<div class="trust"><h3>Индекс по открытым данным <b style="color:${col}">${sc == null ? "мало данных" : sc + "/100"}</b></h3>
+    ${sc == null ? "" : `<div class="tbar"><i style="width:${sc}%;background:${col}"></i></div>`}
+    ${t.parts.map(p => `<div class="trow"><span>${p[0]}</span><b>${p[3]}</b></div>`).join("")}
+    <div class="mnote">Застройщик в ЕРЗ: ${esc(t.e.n)}. Расчёт Эмиля по данным ЕРЗ.РФ на ${esc(META.erzDate||"")}, это не гарантия и не оценка качества. Подробно проверить ЖК и застройщика можно с Эмилем.</div></div>`;
+}
 
 /* ---------- что рядом ---------- */
 function nearHtml(z){
@@ -533,6 +558,10 @@ function openFav(){
     ["Цена до", z => z.pmax ? fmtM(z.pmax)+" млн" : "-"],
     ["≈ цена м²", z => z.ppm ? `<span class="${z.ppm===mMin?"best":""}">${z.ppm} тыс</span>` : "-"],
     ["Акция", z => z.offer && z.offerUntil >= TODAY ? "★ " + esc(z.offer.split(":")[0]) : "-"],
+    ["Надёжность"],
+    ["Индекс", z => { const t = trustOf(z); return !t ? "нет данных" : t.score == null ? "мало данных" : `<b style="color:${grad(1-t.score/100)}">${t.score}/100</b>`; }],
+    ["Сроки (ЕРЗ)", z => z.erz && z.erz.r != null ? z.erz.r + " из 5" : "-"],
+    ["Перенесено", z => z.erz ? String(z.erz.p).replace(".",",") + "%" : "-"],
     ["Квартиры"],
     ["Площади", z => z.amin ? fmtM(z.amin)+"–"+fmtM(z.amax)+" м²" : "-"],
     ["Студии", room("st")], ["1-комн.", room("1")], ["2-комн.", room("2")], ["3-комн.", room("3")], ["4+ комн.", z => z.rooms && (z.rooms["4"]||z.rooms["5"]) ? "от " + fmtM(z.rooms["4"]||z.rooms["5"]) + " млн" : "нет"],
@@ -551,8 +580,10 @@ function openFav(){
     ${rows.map(([n,f]) => f ? `<tr><th>${n}</th>${arr.map(z=>`<td>${f(z)}</td>`).join("")}</tr>` : `<tr class="grp"><th>${n}</th>${arr.map(()=>"<td></td>").join("")}</tr>`).join("")}</table></div>
     ${arr.length > 2 ? '<div class="mnote">← листай таблицу вбок →</div>' : ""}`;
   openSheet(`Избранное<div class="sub">${arr.length} ЖК · сравнение</div>`,
-    `${arr.length > 1 ? cmp : ""}<div class="list">${arr.map(itemRow).join("")}</div>
-     <div class="cta"><button class="btn p" id="favSend">Отправить подборку Эмилю</button><button class="btn s" id="favClear">Очистить</button></div>
+    `<div class="list">${arr.map(itemRow).join("")}</div>
+     <div class="cta"><button class="btn p" id="favSend">Отправить подборку Эмилю</button></div>
+     ${arr.length > 1 ? '<div class="sec">Сравнение</div>' + cmp : ""}
+     <div class="cta"><button class="btn s" id="favClear">Очистить избранное</button></div>
      <div class="mnote">Эмиль посмотрит выбранные ЖК, проверит свободные квартиры и условия и напишет тебе.</div>`, "fav");
   $("#favSend").onclick = e => sendToEmil(`fav_${FAV.slice(0,12).join("-")}`, e.currentTarget, "Подборка отправлена");
   $("#favClear").onclick = () => { FAV = []; saveFav(); renderModes(); updFavBtn(); closeSheet(); };
