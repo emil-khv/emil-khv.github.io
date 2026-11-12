@@ -71,12 +71,13 @@ async function handle(update, env) {
 
   if (text.startsWith("/start") || text.startsWith("/karta")) {
     const src = text.split(" ")[1] || "";
-    const zk = src.match(/^zk(\d+)_([dp])$/);
+    const zk = src.match(/^zk(\d+)_([dpi])$/);
+    const fav = src.match(/^fav_([\d-]+)$/);
     if (zk) {
       // Заявка из карточки ЖК на карте
       const z = await zkById(zk[1]);
       const name = z ? z.name : "ЖК #" + zk[1];
-      const what = zk[2] === "p" ? "планировки и актуальные цены" : "подробности";
+      const what = zk[2] === "p" ? "планировки и актуальные цены" : zk[2] === "i" ? "точный расчёт ипотеки" : "подробности";
       await tg(env, "sendMessage", {
         chat_id: u.id,
         text: "Принял! Эмиль пришлёт " + what + " по ЖК «" + name + "» сюда или в личку.\n\n" +
@@ -89,6 +90,25 @@ async function handle(update, env) {
         disable_web_page_preview: true,
         text: "ЗАЯВКА с карты: " + what + "\nЖК «" + esc(name) + "»" + (z ? " (" + esc(z.district) + (z.pmin ? ", от " + z.pmin + " млн" : "") + ")" : "") + "\n" + who(u) +
           "\n\nОтветь на это сообщение (свайп), и бот перешлёт ответ.",
+      });
+      return;
+    }
+    if (fav) {
+      // Подборка из избранного
+      const ids = fav[1].split("-").slice(0, 12);
+      const items = [];
+      for (const id of ids) { const z = await zkById(id); if (z) items.push(z); }
+      const lines = items.map((z) => "- " + z.name + " (" + z.district + (z.pmin ? ", от " + z.pmin + " млн" : "") + ")").join("\n");
+      await tg(env, "sendMessage", {
+        chat_id: u.id,
+        text: "Подборка у Эмиля:\n" + lines + "\n\nОн проверит свободные квартиры и условия и напишет. Чтобы было точнее, напиши в ответ: комнаты, бюджет и как планируешь покупать.",
+        reply_markup: KEYBOARD,
+      });
+      await tg(env, "sendMessage", {
+        chat_id: admin,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        text: "ЗАЯВКА: подборка из избранного (" + items.length + " ЖК)\n" + esc(lines) + "\n" + who(u) + "\n\nОтветь на это сообщение (свайп), и бот перешлёт ответ.",
       });
       return;
     }
