@@ -27,6 +27,57 @@ async function tg(env, method, body) {
   return r.json();
 }
 
+// ---- /osm: разовая выгрузка инфраструктуры из OpenStreetMap (команда только для Эмиля) ----
+const OSM_BBOX = "48.30,134.90,48.65,135.30";
+const OSM_Q = "[out:csv(::lat,::lon,amenity,shop,highway,railway,leisure;false;\"|\")][timeout:120];(" +
+  "nwr[amenity~\"^(school|kindergarten|clinic|hospital|doctors|pharmacy)$\"](" + OSM_BBOX + ");" +
+  "nwr[shop~\"^(supermarket|convenience|mall)$\"](" + OSM_BBOX + ");" +
+  "node[highway=bus_stop](" + OSM_BBOX + ");node[railway=tram_stop](" + OSM_BBOX + ");" +
+  "nwr[leisure~\"^(park|playground|sports_centre|fitness_centre)$\"](" + OSM_BBOX + ");" +
+  ");out center;";
+const OSM_EPS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+
+async function osmRun(env) {
+  const zk = (await fetch(MAP_URL + "data/zk.json").then((r) => r.json())).items;
+  let txt = null, used = "";
+  for (const e of OSM_EPS) {
+    try {
+      const r = await fetch(e, { method: "POST", body: "data=" + encodeURIComponent(OSM_Q), headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "emil-khv-map/1.0" } });
+      if (r.ok) { txt = await r.text(); used = e; break; }
+    } catch (x) {}
+  }
+  if (!txt) throw new Error("OpenStreetMap не ответил");
+  const K = ["school", "kg", "shop", "stop", "med", "park"];
+  const pts = [];
+  for (const line of txt.split("\n")) {
+    const f = line.split("|"); if (f.length < 7 || !f[0]) continue;
+    const am = f[2], c = am === "school" ? 0 : am === "kindergarten" ? 1 : am ? 4 : f[3] ? 2 : (f[4] || f[5]) ? 3 : f[6] ? 5 : -1;
+    if (c >= 0) pts.push(+f[0], +f[1], c);
+  }
+  const out = {};
+  const kx = 111320 * Math.cos(48.48 * Math.PI / 180), ky = 110540;
+  for (const z of zk) {
+    const n = K.map(() => [0, 0, null]);
+    for (let i = 0; i < pts.length; i += 3) {
+      const dy = (pts[i] - z.lat) * ky; if (dy > 3000 || dy < -3000) continue;
+      const dx = (pts[i + 1] - z.lng) * kx; if (dx > 3000 || dx < -3000) continue;
+      const d = Math.sqrt(dx * dx + dy * dy); if (d > 3000) continue;
+      const a = n[pts[i + 2]];
+      if (d <= 500) a[0]++;
+      if (d <= 1000) a[1]++;
+      if (a[2] == null || d < a[2]) a[2] = Math.round(d);
+    }
+    const o = {}; K.forEach((k, j) => (o[k] = n[j])); out[z.id] = o;
+  }
+  const body = JSON.stringify({ updated: new Date().toISOString().slice(0, 10), source: used, points: pts.length / 3, near: out });
+  const api = "https://api.github.com/repos/emil-khv/emil-khv.github.io/contents/data/nearby.json";
+  const H = { Authorization: "Bearer " + env.GH_TOKEN, "User-Agent": "emil-khv-map", Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+  const g = await fetch(api, { headers: H });
+  const sha = g.ok ? (await g.json()).sha : undefined;
+  const p = await fetch(api, { method: "PUT", headers: H, body: JSON.stringify({ message: "OSM: инфраструктура рядом с ЖК", content: btoa(unescape(encodeURIComponent(body))), sha }) });
+  return "объектов " + pts.length / 3 + ", ЖК " + zk.length + ", GitHub " + p.status;
+}
+
 let ZK = null, ZK_AT = 0;
 async function zkById(id) {
   try {
@@ -67,6 +118,14 @@ async function handle(update, env) {
       });
       return;
     }
+  }
+
+  if (String(u.id) === admin && text === "/osm") {
+    await tg(env, "sendMessage", { chat_id: admin, text: "Выгружаю школы, сады, магазины и остановки из OpenStreetMap..." });
+    let res;
+    try { res = "Готово: " + (await osmRun(env)); } catch (e) { res = "Не получилось: " + e.message; }
+    await tg(env, "sendMessage", { chat_id: admin, text: res });
+    return;
   }
 
   if (text.startsWith("/start") || text.startsWith("/karta")) {
